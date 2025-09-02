@@ -1,0 +1,372 @@
+---
+title: Building Customer-Specific Relationship Agents with Letta
+subtitle: Create persistent agents that grow smarter with each customer interaction
+slug: cookbooks/customer-specific-agents
+---
+
+<video width="560" height="315" controls>
+  <source src="/images/letta-demo-video.mp4" type="video/mp4" />
+  Your browser does not support the video tag.
+</video>
+
+Most CRM systems treat customer interactions as isolated events. Each conversation starts from scratch, losing valuable context and relationship depth over time.
+
+This guide shows you how to build customer-specific agents in Letta that grow smarter with each interaction. Instead of generic chatbots, you'll create persistent agents that remember previous conversations, accumulate knowledge about each customer's business, and provide increasingly personalized experiences.
+
+We'll build a customer success agent template where each new signup gets their own dedicated agent, created from the template, that researches their background, updates its memory, and sends personalized welcome emails.
+
+<Note>
+We'll use the [ADE](/agent-development-environment) to build our agents in a UI, but all steps can be done using the [Letta API / SDK](/api-reference/overview).
+</Note>
+
+## Prerequisites
+
+To follow along you'll need a free account for:
+
+- [Letta](https://www.letta.com) - Agent development platform
+- [Gmail](https://gmail.com) - Email sending capability
+- [Zapier MCP](https://mcp.zapier.com/mcp) - MCP email tool integration
+- [Exa](https://exa.ai) - MCP research and LinkedIn lookup tools
+
+## Creating an Agent Template
+
+Agent templates serve as blueprints that define your agent's memory structure, tools, and behavior patterns. From the Letta dashboard, click **Templates** → **+ New template** → **Start from scratch**.
+
+<img className="w-300" src="/images/add-template.png" alt="Creating a new agent template in Letta dashboard" />
+
+This launches the Agent Development Environment (ADE) with three key areas: a center chat simulator for testing, a left sidebar for configuration (template settings, tools, LLM config), and a right panel showing memory architecture with real-time context utilization.
+
+<img className="w-300" src="/images/agent-development-environment.png" alt="Agent Development Environment interface showing chat simulator, configuration sidebar, and memory blocks panel" />
+
+Name your template `customer-success-agent` by clicking the **Edit Template name** button.
+
+<img className="w-300" src="/images/name-template.png" alt="Editing agent template name in the ADE" />
+
+## Setting Up Memory Blocks
+
+Memory blocks create your agent's persistent knowledge architecture. In the ADE's right panel, in the **Core Memory** section, click **Advanced** → **+ New Block** to add custom Memory Blocks.
+
+<img className="w-300" src="/images/add-custom-memory-block.png" alt="Adding custom memory blocks in Core Memory section" />
+
+Create four core memory blocks with the following configurations:
+
+<AccordionGroup>
+<Accordion title="`customer` - Customer Profile and Context">
+<Steps>
+  <Step title="Label">
+    `customer`
+  </Step>
+  <Step title="Description">
+    `Detailed information about the customer contact including professional background, role, and business context`
+  </Step>
+  <Step title="Value">
+    ```
+    Customer Profile:
+    Name: {{customer_name}}
+    Email: {{customer_email}}
+    Company: {{company_name}}
+    Title: {{job_title}}
+    Industry: {{industry_sector}}
+
+    Professional Background:
+    {{professional_background}}
+
+    Business Challenges:
+    {{business_challenges}}
+
+    Communication Preferences:
+    {{communication_preferences}}
+    ```
+  </Step>
+</Steps>
+</Accordion>
+
+<Accordion title="`organization` - Company Knowledge Base">
+<Steps>
+  <Step title="Label">
+    `organization`
+  </Step>
+  <Step title="Description">
+    `ACME Manufacturing's company information, products, and value propositions for reference`
+  </Step>
+  <Step title="Read-Only">
+    Yes
+  </Step>
+  <Step title="Value">
+    ```
+    ACME Manufacturing - Industrial Automation Solutions
+
+    Key Products:
+    • QualityCheck AI: Real-time quality control system (reduces defects by 30%)
+    • SupplyOptimize: Supply chain optimization platform (20% cost savings)
+    • ProductionFlow: Manufacturing workflow automation
+
+    Target Industries: Automotive, Aerospace, Electronics, Medical Devices
+    Company Size Focus: 100-1000 employees
+
+    Value Propositions:
+    - Reduce manufacturing defects by 25-40%
+    - Optimize supply chain costs by 15-25%
+    - Improve production efficiency by 20-35%
+    - Seamless ERP integration
+
+    Competitive Advantages:
+    - Industry-specific AI models trained on manufacturing data
+    - 99.7% uptime SLA with 24/7 support
+    - ROI typically achieved within 6 months
+
+    Contact Information:
+    - Representative: [Your Name]
+    - Title: [Your Title]
+    ```
+  </Step>
+</Steps>
+</Accordion>
+
+<Accordion title="`tool_use_guidelines` - Research and Communication Guidelines">
+<Steps>
+  <Step title="Label">
+    `tool_use_guidelines`
+  </Step>
+  <Step title="Description">
+    `Instructions for effective tool usage and customer research methodology`
+  </Step>
+  <Step title="Read-Only">
+    Yes
+  </Step>
+  <Step title="Value">
+    ```
+    Research Strategy:
+    1. Begin with LinkedIn research to understand the contact's professional background
+    2. Use web search to research the customer's company, recent news, and industry challenges
+    3. Focus on identifying specific use cases for ACME Manufacturing's solutions
+    4. Look for relevant business triggers (growth, challenges, new initiatives)
+
+    Communication Guidelines:
+    - Personalize emails based on research findings
+    - Reference specific company challenges or industry trends
+    - Connect ACME products to customer's likely pain points
+    - Maintain professional but approachable tone
+    - Include relevant case studies or statistics when appropriate
+
+    Tool Usage Best Practices:
+    - Use company_research_exa for comprehensive business intelligence
+    - Use linkedin_search_exa for professional background verification
+    - Draft emails with research context before sending
+    - Update memory blocks with key findings after each research session
+    ```
+  </Step>
+</Steps>
+</Accordion>
+
+<Accordion title="`tasks` - Action Items and Objectives">
+<Steps>
+  <Step title="Label">
+    `tasks`
+  </Step>
+  <Step title="Description">
+    `Current objectives, action items, and next steps for this customer relationship`
+  </Step>
+  <Step title="Value">
+    ```
+    Current Priorities:
+    1. Complete customer and company research
+    2. Identify specific use cases for ACME products
+    3. Draft personalized welcome email
+    4. Schedule discovery call
+    5. Prepare customized demo materials
+
+    Research Checklist:
+    - [] LinkedIn professional background research
+    - [] Company website and recent news analysis
+    - [] Industry-specific challenge identification
+    - [] Competitive landscape assessment
+    ```
+  </Step>
+</Steps>
+</Accordion>
+</AccordionGroup>
+
+**Customer Block**: Stores everything your agent learns about the individual customer contact. Template variables get populated when creating agents from this template, while research findings accumulate in descriptive fields.
+
+**Organization Block**: Contains static company information that agents reference but shouldn't modify. Set as read-only to ensure consistent messaging across all customer interactions.
+
+**Tool Use Guidelines Block**: Contains instructions for how your agent should use its research and communication tools effectively.
+
+**Tasks Block**: Keeps your agent focused on relationship-building objectives while tracking progress through complex customer success workflows.
+
+<Note>
+In the `organisation` memory block, replace the bracketed placeholders with your actual name and title so the agent sends emails with proper sender identification.
+</Note>
+
+### Template Variables
+
+The `{{variable_name}}` placeholders in the customer memory blocks will get populated with actual customer data when you create agents from your template and they begin to interact with your customers.
+
+## Configuring MCP Tools for Customer Research
+
+Tools transform your agent from a static responder into an active researcher. In the ADE's left sidebar, click **Tools** > **Tool Manager**. This opens a modal where you'll configure MCP (Model Context Protocol) servers that provide external capabilities.
+
+<img className="w-300" src="/images/mcp-options.png" alt="Tool Manager modal showing MCP server configuration options" />
+
+Your agent needs research and communication tools, as well as email drafting and sending tools, to gather customer intelligence and send personalized emails.
+
+### Adding Exa for Research Tools
+
+Exa provides web search, company research, and LinkedIn lookup capabilities for your agent.
+
+<AccordionGroup>
+<Accordion title="Complete Exa Setup Process">
+<Steps>
+  <Step title="Add Exa MCP Server">
+    In the Tool Manager sidebar, click **+ Add MCP server** in the MCP servers section. Select **Exa** from the list to open the configuration modal.
+  </Step>
+  <Step title="Get Exa API Key">
+    You'll need an Exa API key: go to [exa.ai](https://exa.ai), create an account, then visit [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys) to copy your default secret key.
+
+    <img className="w-300" src="/images/exa-api.png" alt="Exa API key configuration in dashboard" />
+  </Step>
+  <Step title="Configure and Test Connection">
+    Paste the API key in the modal and click **Test Connection**. When successful, you'll see available tools including `web_search_exa`, `company_research_exa`, and `linkedin_search_exa`. Click **Confirm** to add the server.
+
+    <img className="w-300" src="/images/exa-tools.png" alt="Available Exa tools after successful connection" />
+  </Step>
+</Steps>
+</Accordion>
+</AccordionGroup>
+
+### Adding Zapier for Email Tools
+
+Zapier provides Gmail integration for drafting and sending personalized emails.
+
+<AccordionGroup>
+<Accordion title="Complete Zapier Setup Process">
+<Steps>
+  <Step title="Add Zapier MCP Server">
+    Click **+ Add MCP server** again and select **Zapier**. For the API setup, go to [mcp.zapier.com/mcp](https://mcp.zapier.com/mcp), create an account, then click **+ NewMCP Server** in your Zapier dashboard.
+
+    <img className="w-300" src="/images/zap-new-mcp.png" alt="Creating new MCP server in Zapier dashboard" />
+  </Step>
+  <Step title="Configure MCP Server">
+    Choose **Other** for MCP client options and name it "Email sender". After creating the server, click **+ Add tool**, select **Gmail** from the modal, and add the Gmail tools. Connect your Gmail account for sending emails.
+
+    <img className="w-300" src="/images/gmail-tools.png" alt="Adding Gmail tools in Zapier MCP server" />
+  </Step>
+  <Step title="Get Server URL">
+    In your Zapier dashboard, click **Connect** in the top toolbar and copy the server URL.
+
+    <img className="w-300" src="/images/zap-server-url.png" alt="Copying server URL from Zapier dashboard" />
+  </Step>
+  <Step title="Connect to Letta">
+    Return to the Letta modal, paste the server URL (no API key needed), and test the connection. You'll see Gmail tools appear - click **Confirm**.
+
+    <img className="w-300" src="/images/gmail-tools-connected.png" alt="Gmail tools successfully connected in Letta" />
+  </Step>
+</Steps>
+</Accordion>
+</AccordionGroup>
+
+### Connecting Tools to Your Agent
+
+In the Tool Manager view, you'll now see both MCP servers. Click each server to view available tools, then click the **Attach** button next to the tools your agent needs:
+
+<img className="w-300" src="/images/attach-tool.png" alt="Attaching tools to agent in Tool Manager" />
+
+**From Exa**: Attach `web_search_exa`, `company_research_exa`, and `linkedin_search_exa`.
+
+**From Zapier**: Attach `draft_email` and `send_email`.
+
+## Saving Your Template
+
+Once you've configured all memory blocks and tools, click the **Save** button in the ADE toolbar. This opens a version modal - click **Save New Version** to save your template for agent creation.
+
+Your `customer-success-agent` template is now ready to create customer-specific agents.
+
+## Creating Customer Identity
+
+Before creating agents from your template, you need to set up customer identities. In a real-world scenario, each new customer signup would have their identity created (either manually or via API integration). For this demo, we'll create an identity for yourself to test the complete workflow.
+
+Navigate back to the main Letta dashboard and click **Identities** in the left sidebar, then click **+ Create Identity**.
+
+In the modal that opens, you'll configure the customer identity:
+
+**Name**: Enter your own full name (e.g., "[Your Full Name]")
+**Identity Type**: Select **User** for individual customer contacts
+**Unique Identifier**: Create a unique string to identify this customer in your system (e.g., "customer_[your_name]")
+
+Click **Confirm** when all fields are populated.
+
+<img className="w-300" src="/images/create-identity.png" alt="Creating customer identity with name, type, and unique identifier" />
+
+<Note>
+The unique identifier becomes crucial for programmatic agent creation when integrating with CRMs or signup workflows. Use a consistent naming pattern that scales across your customer base.
+</Note>
+
+## Creating Agent from Template
+
+With your template and customer identity ready, navigate to **Agents** in the sidebar and click **+ Create a new agent**.
+
+In the modal, locate the **Create an agent from existing template** section and click on your `customer-success-agent` template. 
+
+<Note>
+When creating an agent from a template that contains memory variables, Letta will prompt you to fill in the variable values before creating the agent. This is where you'll populate the customer-specific information like `{{customer_name}}`, `{{customer_email}}`, etc.
+</Note>
+
+Fill in your own customer details for testing:
+
+<img className="w-300" src="/images/template-variables-modal.png" alt="Modal showing template variables to fill in when creating agent from template" />
+
+Click **Create Agent**. Letta creates the agent and opens the ADE for your new agent instance.
+
+You'll see the agent name in the top-left corner of the ADE (e.g., "customer-success-agent:1/random-generated-name").
+
+<img className="w-300" src="/images/agent-from-template.png" alt="New agent created from template showing inherited memory blocks and tools" />
+
+<Note>
+Notice that the agent automatically inherits all memory blocks and tools from your template. The memory blocks now contain the populated customer information instead of template variables, and all the research and email tools are already attached and configured.
+</Note>
+
+### Assigning the Identity
+
+In the ADE's left sidebar, select **Edit Identities** in the Identities section. Search for your customer identity by name, click on the identity, then click **Update Identities** to assign it to this agent.
+
+<img className="w-300" src="/images/assign-identities.png" alt="Assigning customer identity to agent in Edit Identities section" />
+
+## Testing the Agent
+
+Once your agent is set up, test the complete workflow with a customer research prompt. In the ADE chat interface, enter:
+
+```
+Hi! Your new customer [Customer Name] ([email@example.com]) just signed up for our trial. They could benefit from our industrial automation solutions, and they're likely evaluating our platform for potential implementation.
+
+Please research their professional background using LinkedIn and research their company to understand their business and potential needs for our ACME Manufacturing automation solutions. Update your memory blocks with your findings, then draft and send a personalized welcome email that references their background and suggests relevant ACME solutions.
+
+Complete the full workflow: research, memory updates, email draft, and email sending. Provide a summary of your research findings and confirm when the email has been sent.
+```
+
+<Note>
+Replace `[Customer Name]` and `[email@example.com]` with actual customer details for testing. Use your own email address so you can receive and review the personalized welcome email the agent sends.
+</Note>
+
+The agent will execute the workflow by using its research tools, updating memory blocks with findings, and sending a personalized welcome email. You can observe the process in real-time and review the generated email output to ensure quality and personalization. Check your email inbox to see the final personalized message the agent created and sent.
+
+<Success>
+Congratulations! You've built a customer-specific agent system that creates personalized, intelligent relationships at scale. Each agent learns and improves with every customer interaction.
+</Success>
+
+## What's Next?
+
+You've built a complete customer-specific agent system that can scale across hundreds of customers. Each agent learns and improves with every interaction, creating deeper relationships over time.
+
+**Immediate possibilities:**
+- Connect agent creation to your CRM or signup workflow using webhooks
+- Expand beyond welcome emails to ongoing relationship management
+- Add more research tools or communication channels
+- Create different agent templates for various customer segments
+
+**Long-term potential:**
+- Agents that schedule meetings and manage follow-ups
+- Integration with support ticket systems for context-aware assistance
+- Advanced analytics tracking relationship progression and agent effectiveness
+
+The combination of persistent memory, research tools, and personalized communication transforms customer relationships from isolated transactions into continuous, intelligent conversations.
